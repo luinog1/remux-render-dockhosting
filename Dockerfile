@@ -67,11 +67,15 @@ RUN mkdir -p /app/dashboard /app/jellyfin-web \
     && test -n "$(find /app/dashboard -mindepth 1 -maxdepth 1 -print -quit)" \
     && test -n "$(find /app/jellyfin-web -mindepth 1 -maxdepth 1 -print -quit)"
 
-RUN mkdir -p /data/logs /data/torrents
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+    && mkdir -p /data/logs /data/torrents \
+    && chmod 0777 /data /data/logs /data/torrents
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
     CMD curl -4 -fsS "http://127.0.0.1:${PORT}/health" || exit 1
 
-CMD ["/bin/sh", "-c", "mkdir -p /data/logs /data/torrents && exec /app/remux-server"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
