@@ -4,7 +4,7 @@
 # The Remux Rust binary is prebuilt by GitHub Actions and published as a release
 # asset in this repository. DockHosting only assembles the runtime image.
 
-FROM debian:trixie-slim
+FROM debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
 
 ARG TARGETARCH
 ARG REMUX_ASSETS_VERSION=0.36.1
