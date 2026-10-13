@@ -1,37 +1,14 @@
 # syntax=docker/dockerfile:1.7
 
-# Dedicated DockHosting build for luinog1/remux-render.
-# This repository intentionally avoids ghcr.io/lostb1t/remux because
-# DockHosting's builder was resetting large GHCR downloads over IPv6.
-
-FROM rust:bookworm AS server-builder
-
-ARG REMUX_REPO=https://github.com/luinog1/remux-render.git
-ARG REMUX_COMMIT=d7c1c67271c2a6b4e4614aec6aa400004225d9a3
-
-WORKDIR /src
-
-RUN printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4 \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-        git pkg-config libssl-dev ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN git init \
-    && git remote add origin "${REMUX_REPO}" \
-    && git -c http.version=HTTP/1.1 fetch --depth 1 origin "${REMUX_COMMIT}" \
-    && git checkout --detach FETCH_HEAD
-
-ENV SQLX_OFFLINE=true
-
-RUN cargo build --release --locked -p remux-server \
-    && test -x /src/target/release/remux-server
-
+# Dedicated DockHosting runtime for luinog1/remux-render.
+# The Remux Rust binary is prebuilt by GitHub Actions and published as a release
+# asset in this repository. DockHosting only assembles the runtime image.
 
 FROM debian:trixie-slim
 
 ARG TARGETARCH
 ARG REMUX_ASSETS_VERSION=0.36.1
+ARG REMUX_BINARY_TAG=dockhosting-bin
 
 ENV DEBIAN_FRONTEND=noninteractive \
     HOST=0.0.0.0 \
@@ -47,7 +24,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH="/usr/lib/jellyfin-ffmpeg:${PATH}" \
     DISABLE_STARTUP_TASKS=true
 
-RUN printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4 \
+RUN test "${TARGETARCH}" = "amd64" \
+    && printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4 \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg python3 python3-pip \
@@ -66,6 +44,17 @@ RUN printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4 \
 
 WORKDIR /app
 
+# The fixed release URL stays stable. On the very first setup the GitHub Action
+# may still be compiling while DockHosting starts its auto-deploy, so retry the
+# binary download for up to 20 minutes instead of failing on a temporary 404.
+RUN curl -4 -fL \
+        --retry 60 --retry-delay 15 --retry-all-errors --retry-max-time 1200 \
+        --connect-timeout 20 \
+        "https://github.com/luinog1/remux-render-dockhosting/releases/download/${REMUX_BINARY_TAG}/remux-server-linux-amd64" \
+        -o /app/remux-server \
+    && chmod +x /app/remux-server \
+    && /app/remux-server --help >/dev/null 2>&1 || true
+
 RUN mkdir -p /app/dashboard /app/jellyfin-web \
     && curl -4 -fL --retry 10 --retry-all-errors --connect-timeout 20 \
         "https://github.com/lostb1t/remux/releases/download/v${REMUX_ASSETS_VERSION}/remux-${REMUX_ASSETS_VERSION}-dashboard.tar.gz" \
@@ -78,8 +67,6 @@ RUN mkdir -p /app/dashboard /app/jellyfin-web \
     && rm -f /tmp/dashboard.tar.gz /tmp/jellyfin-web.tar.gz \
     && test -n "$(find /app/dashboard -mindepth 1 -maxdepth 1 -print -quit)" \
     && test -n "$(find /app/jellyfin-web -mindepth 1 -maxdepth 1 -print -quit)"
-
-COPY --from=server-builder /src/target/release/remux-server /app/remux-server
 
 RUN mkdir -p /data/logs /data/torrents
 
