@@ -1,0 +1,51 @@
+name: Build DockHosting Remux binary
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-remux-binary.yml"
+
+permissions:
+  contents: write
+
+env:
+  REMUX_REPO: luinog1/remux-render
+  REMUX_COMMIT: d7c1c67271c2a6b4e4614aec6aa400004225d9a3
+  RELEASE_TAG: dockhosting-bin
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Remux source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.REMUX_REPO }}
+          ref: ${{ env.REMUX_COMMIT }}
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
+
+      - name: Build remux-server
+        env:
+          SQLX_OFFLINE: "true"
+        run: cargo build --release --locked -p remux-server
+
+      - name: Prepare binary
+        run: |
+          strip target/release/remux-server
+          cp target/release/remux-server remux-server-linux-amd64
+          chmod +x remux-server-linux-amd64
+          sha256sum remux-server-linux-amd64 > remux-server-linux-amd64.sha256
+
+      - name: Publish fixed DockHosting release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag || true
+          gh release create "${RELEASE_TAG}"             --repo "${GITHUB_REPOSITORY}"             --title "DockHosting Remux binary"             --notes "Prebuilt remux-server from ${REMUX_REPO}@${REMUX_COMMIT} for linux/amd64."             --prerelease             remux-server-linux-amd64             remux-server-linux-amd64.sha256
