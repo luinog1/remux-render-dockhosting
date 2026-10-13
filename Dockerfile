@@ -52,8 +52,7 @@ RUN curl -4 -fL \
         --connect-timeout 20 \
         "https://github.com/luinog1/remux-render-dockhosting/releases/download/${REMUX_BINARY_TAG}/remux-server-linux-amd64" \
         -o /app/remux-server \
-    && chmod +x /app/remux-server \
-    && /app/remux-server --help >/dev/null 2>&1 || true
+    && chmod +x /app/remux-server
 
 RUN mkdir -p /app/dashboard /app/jellyfin-web \
     && curl -4 -fL --retry 10 --retry-all-errors --connect-timeout 20 \
