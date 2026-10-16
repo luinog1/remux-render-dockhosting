@@ -28,8 +28,7 @@ RUN test "${TARGETARCH}" = "amd64" \
     && printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4 \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates curl gnupg python3 python3-pip \
-        libdrm2 mesa-va-drivers vainfo libfontconfig1 libfreetype6 libssl3 tar \
+        ca-certificates curl gnupg libfontconfig1 libfreetype6 libssl3 tar \
     && mkdir -p /etc/apt/keyrings \
     && curl -4 -fsSL --retry 8 --retry-all-errors \
         https://repo.jellyfin.org/jellyfin_team.gpg.key \
@@ -38,7 +37,6 @@ RUN test "${TARGETARCH}" = "amd64" \
         > /etc/apt/sources.list.d/jellyfin.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends jellyfin-ffmpeg8 \
-    && pip3 install --break-system-packages yt-dlp "curl-cffi>=0.10,<0.15" \
     && apt-get remove -y --autoremove gnupg \
     && rm -rf /var/lib/apt/lists/*
 
