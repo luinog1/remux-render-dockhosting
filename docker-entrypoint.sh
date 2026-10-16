@@ -6,8 +6,17 @@ DB_PATH="${DATA_DIR}/db.sqlite"
 LOG_DIR="${DATA_DIR}/logs"
 TORRENT_DIR="${DATA_DIR}/torrents"
 
+# DockHosting/Coolify may inject its own DATABASE_URL when a database is linked.
+# Remux's primary application database must remain the local persistent SQLite
+# file under /data, matching the working Azure deployment.
+export DATA_DIR
+export DATABASE_URL="sqlite://${DB_PATH}?mode=rwc"
+export LOG_FILE="${LOG_DIR}/remux.jsonl"
+export TORRENT_DATA_DIR="${TORRENT_DIR}"
+
 echo "[dockhosting-entrypoint] uid=$(id -u) gid=$(id -g)"
 echo "[dockhosting-entrypoint] preparing DATA_DIR=${DATA_DIR}"
+echo "[dockhosting-entrypoint] forcing DATABASE_URL=sqlite://${DB_PATH}?mode=rwc"
 
 mkdir -p "${DATA_DIR}" "${LOG_DIR}" "${TORRENT_DIR}"
 
