@@ -29,6 +29,7 @@ RUN test "${TARGETARCH}" = "amd64" \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg libfontconfig1 libfreetype6 libssl3 tar \
+        sqlite3 mariadb-client \
     && mkdir -p /etc/apt/keyrings \
     && curl -4 -fsSL --retry 8 --retry-all-errors \
         https://repo.jellyfin.org/jellyfin_team.gpg.key \
@@ -66,14 +67,15 @@ RUN mkdir -p /app/dashboard /app/jellyfin-web \
     && test -n "$(find /app/jellyfin-web -mindepth 1 -maxdepth 1 -print -quit)"
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY remux-backup.sh /usr/local/bin/remux-backup.sh
 
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/remux-backup.sh \
     && mkdir -p /data/logs /data/torrents \
     && chmod 0777 /data /data/logs /data/torrents
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
-    CMD curl -4 -fsS "http://127.0.0.1:${PORT}/health" || exit 1
+    CMD curl -4 -fsS "http://127.0.0.1:3000/health" || exit 1
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
