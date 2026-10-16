@@ -5,10 +5,11 @@ DATA_DIR="${DATA_DIR:-/data}"
 DB_PATH="${DATA_DIR}/db.sqlite"
 LOG_DIR="${DATA_DIR}/logs"
 TORRENT_DIR="${DATA_DIR}/torrents"
+BACKUP_INTERVAL_SECONDS="${BACKUP_INTERVAL_SECONDS:-300}"
 
-# DockHosting/Coolify may inject its own DATABASE_URL when a database is linked.
-# Remux's primary application database must remain the local persistent SQLite
-# file under /data, matching the working Azure deployment.
+# DockHosting/Coolify may inject its own DATABASE_URL when a managed database
+# is linked. Remux itself must keep using local SQLite, while the linked MySQL
+# service is used only as durable backup storage.
 export DATA_DIR
 export DATABASE_URL="sqlite://${DB_PATH}?mode=rwc"
 export LOG_FILE="${LOG_DIR}/remux.jsonl"
@@ -19,32 +20,61 @@ echo "[dockhosting-entrypoint] preparing DATA_DIR=${DATA_DIR}"
 echo "[dockhosting-entrypoint] forcing DATABASE_URL=sqlite://${DB_PATH}?mode=rwc"
 
 mkdir -p "${DATA_DIR}" "${LOG_DIR}" "${TORRENT_DIR}"
-
-# DockHosting can mount a fresh volume with restrictive ownership. The Remux
-# process runs inside this container and needs to create SQLite WAL/SHM files.
 chmod 0777 "${DATA_DIR}" "${LOG_DIR}" "${TORRENT_DIR}" 2>/dev/null || true
-
-if [ -e "${DB_PATH}" ]; then
-  chmod 0666 "${DB_PATH}" 2>/dev/null || true
-fi
 
 PROBE="${DATA_DIR}/.remux-write-test"
 if ! ( : > "${PROBE}" && rm -f "${PROBE}" ); then
   echo "[dockhosting-entrypoint] ERROR: ${DATA_DIR} is not writable." >&2
-  echo "[dockhosting-entrypoint] Check the DockHosting persistent-volume mount and make sure it is mounted read/write at ${DATA_DIR}." >&2
-  ls -ld "${DATA_DIR}" "${LOG_DIR}" "${TORRENT_DIR}" >&2 || true
   exit 70
 fi
 
-# Pre-create the SQLite database so an ownership/permission problem is exposed
-# here instead of as SQLite code 14 later.
+# If this is a fresh ephemeral container, restore the latest durable SQLite
+# snapshot from the linked MySQL service before Remux starts.
+if [ ! -s "${DB_PATH}" ]; then
+  /usr/local/bin/remux-backup.sh restore || {
+    echo "[dockhosting-entrypoint] WARNING: remote restore failed; starting without restored state" >&2
+  }
+fi
+
 if [ ! -e "${DB_PATH}" ]; then
   : > "${DB_PATH}"
 fi
 chmod 0666 "${DB_PATH}" 2>/dev/null || true
 
 echo "[dockhosting-entrypoint] data directory is writable"
-ls -ld "${DATA_DIR}" "${LOG_DIR}" "${TORRENT_DIR}" || true
 ls -l "${DB_PATH}" || true
 
-exec /app/remux-server
+backup_loop() {
+  # Give Remux time to run migrations and finish startup before first snapshot.
+  sleep 60
+  while :; do
+    /usr/local/bin/remux-backup.sh backup || true
+    sleep "${BACKUP_INTERVAL_SECONDS}"
+  done
+}
+
+shutdown() {
+  echo "[dockhosting-entrypoint] shutdown requested; creating final backup"
+  /usr/local/bin/remux-backup.sh backup || true
+  if [ -n "${APP_PID:-}" ]; then
+    kill -TERM "${APP_PID}" 2>/dev/null || true
+  fi
+}
+
+trap shutdown TERM INT
+
+/usr/local/bin/remux-server &
+APP_PID=$!
+
+backup_loop &
+BACKUP_PID=$!
+
+set +e
+wait "${APP_PID}"
+STATUS=$?
+set -e
+
+kill "${BACKUP_PID}" 2>/dev/null || true
+wait "${BACKUP_PID}" 2>/dev/null || true
+
+exit "${STATUS}"
