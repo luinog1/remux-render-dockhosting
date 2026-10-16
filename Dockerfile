@@ -30,6 +30,7 @@ RUN test "${TARGETARCH}" = "amd64" \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg libfontconfig1 libfreetype6 libssl3 tar \
         sqlite3 mariadb-client \
+        sqlite3 mariadb-client \
     && mkdir -p /etc/apt/keyrings \
     && curl -4 -fsSL --retry 8 --retry-all-errors \
         https://repo.jellyfin.org/jellyfin_team.gpg.key \
