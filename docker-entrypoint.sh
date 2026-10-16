@@ -12,7 +12,7 @@ BACKUP_INTERVAL_SECONDS="${BACKUP_INTERVAL_SECONDS:-300}"
 # service is used only as durable backup storage.
 export DATA_DIR
 export HOST="0.0.0.0"
-export PORT="3000"
+export PORT="${PORT:-3000}"
 export DATABASE_URL="sqlite://${DB_PATH}?mode=rwc"
 export LOG_FILE="${LOG_DIR}/remux.jsonl"
 export TORRENT_DATA_DIR="${TORRENT_DIR}"
