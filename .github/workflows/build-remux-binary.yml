@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - .github/workflows/build-remux-binary.yml
+      - patches/**
 
 permissions:
   contents: write
@@ -15,14 +16,21 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
+      - name: Checkout DockHosting adaptations
+        uses: actions/checkout@v4
+        with:
+          path: dock
+
       - name: Checkout upstream Remux v0.38.2
         uses: actions/checkout@v4
         with:
           repository: lostb1t/remux
           ref: v0.38.2
           fetch-depth: 0
+          path: remux
 
       - name: Reapply DockHosting performance patches
+        working-directory: remux
         run: |
           set -euo pipefail
           git config user.name "DockHosting build"
@@ -32,10 +40,9 @@ jobs:
           git cherry-pick 0de6fdfec5ba1422b262e463df1162754a36370c
           git cherry-pick 75779d75f0c73ed67b5834f73d1edecdc79e7520
 
-      - name: Auto-enable new AIOMetadata catalogs
-        run: |
-          set -euo pipefail
-          python3 -c 'from pathlib import Path; p=Path("crates/remux-server/src/addons/stremio.rs"); s=p.read_text(); a="        Ok(manifest\\n            .catalogs\\n            .into_iter()"; b="        let auto_enable_catalogs = self.manifest_url.to_string().contains(\\\"aiometadata.fortheweak.cloud\\\");\\n\\n        Ok(manifest\\n            .catalogs\\n            .into_iter()"; assert a in s, "upstream Stremio catalog layout changed"; s=s.replace(a,b,1); a="                CatalogInfo {\\n                    collection_media_kind:"; b="                CatalogInfo {\\n                    default_enabled: auto_enable_catalogs,\\n                    collection_media_kind:"; assert a in s, "upstream CatalogInfo layout changed"; p.write_text(s.replace(a,b,1))'
+      - name: Apply AIOMetadata auto-library adaptation
+        working-directory: remux
+        run: git apply --check ../dock/patches/aiometadata-auto-library.patch && git apply ../dock/patches/aiometadata-auto-library.patch
 
       - name: Install build dependencies
         run: |
@@ -43,14 +50,15 @@ jobs:
           sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
 
       - name: Build remux-server
+        working-directory: remux
         env:
           SQLX_OFFLINE: "true"
         run: cargo build --release --locked -p remux-server
 
       - name: Prepare binary
         run: |
-          strip target/release/remux-server
-          cp target/release/remux-server remux-server-linux-amd64
+          strip remux/target/release/remux-server
+          cp remux/target/release/remux-server remux-server-linux-amd64
           chmod +x remux-server-linux-amd64
           sha256sum remux-server-linux-amd64 > remux-server-linux-amd64.sha256
 
@@ -59,4 +67,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete dockhosting-bin --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag || true
-          gh release create dockhosting-bin --repo "${GITHUB_REPOSITORY}" --title "DockHosting Remux binary" --notes "Remux v0.38.2 with DockHosting patches and AIOMetadata catalog auto-enable." --prerelease remux-server-linux-amd64 remux-server-linux-amd64.sha256
+          gh release create dockhosting-bin --repo "${GITHUB_REPOSITORY}" --title "DockHosting Remux binary" --notes "Remux v0.38.2 with DockHosting performance patches and AIOMetadata catalog auto-enable." --prerelease remux-server-linux-amd64 remux-server-linux-amd64.sha256
