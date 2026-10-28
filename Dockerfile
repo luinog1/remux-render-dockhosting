@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-# Dedicated DockHosting runtime for luinog1/remux-render.
+# Dedicated DockHosting runtime for luinog1/remux-render (builder refresh).
 # The Remux Rust binary is prebuilt by GitHub Actions and published as a release
 # asset in this repository. DockHosting only assembles the runtime image.
 
