@@ -10,22 +10,24 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout upstream Remux v0.38.2
+      - name: Checkout latest upstream Remux main
         uses: actions/checkout@v4
         with:
           repository: lostb1t/remux
-          ref: v0.38.2
+          ref: main
           fetch-depth: 0
 
-      - name: Reapply DockHosting performance patches
+      - name: Record upstream revision
         run: |
-          set -euo pipefail
-          git config user.name "DockHosting build"
-          git config user.email "actions@users.noreply.github.com"
-          git remote add luinog https://github.com/luinog1/remux-render.git
-          git fetch --no-tags luinog 0de6fdfec5ba1422b262e463df1162754a36370c 75779d75f0c73ed67b5834f73d1edecdc79e7520
-          git cherry-pick 0de6fdfec5ba1422b262e463df1162754a36370c
-          git cherry-pick 75779d75f0c73ed67b5834f73d1edecdc79e7520
+          echo "UPSTREAM_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          git log -1 --oneline
+
+      - name: Preserve DockHosting SQLite relations index
+        run: |
+          cat > crates/remux-server/migrations/202609280001_media_relations_left_weight_idx.sql <<'SQL'
+          CREATE INDEX IF NOT EXISTS idx_media_relations_left_weight_right
+              ON media_relations(left_media_id, weight, right_media_id);
+          SQL
 
       - name: Apply AIOMetadata auto-library adaptation
         run: |
@@ -69,7 +71,7 @@ jobs:
           SQLX_OFFLINE: "true"
         run: cargo build --release --locked -p remux-server
 
-      - name: Publish fixed DockHosting release
+      - name: Publish DockHosting release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -78,4 +80,4 @@ jobs:
           chmod +x remux-server-linux-amd64
           sha256sum remux-server-linux-amd64 > remux-server-linux-amd64.sha256
           gh release delete dockhosting-bin --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag || true
-          gh release create dockhosting-bin --repo "${GITHUB_REPOSITORY}" --title "DockHosting Remux binary" --notes "Remux v0.38.2 with DockHosting performance patches and AIOMetadata catalog auto-enable." --prerelease remux-server-linux-amd64 remux-server-linux-amd64.sha256
+          gh release create dockhosting-bin             --repo "${GITHUB_REPOSITORY}"             --title "DockHosting Remux binary"             --notes "Latest lostb1t/remux main at ${UPSTREAM_SHA}, with DockHosting SQLite index and AIOMetadata catalog auto-enable."             --prerelease             remux-server-linux-amd64 remux-server-linux-amd64.sha256
