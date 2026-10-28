@@ -42,7 +42,7 @@ jobs:
 
       - name: Apply AIOMetadata auto-library adaptation
         working-directory: remux
-        run: git apply --check ../dock/patches/aiometadata-auto-library.patch && git apply ../dock/patches/aiometadata-auto-library.patch
+        run: python3 ../dock/patches/aiometadata_auto_library.py
 
       - name: Install build dependencies
         run: |
