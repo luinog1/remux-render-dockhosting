@@ -40,8 +40,9 @@ jobs:
           git cherry-pick 75779d75f0c73ed67b5834f73d1edecdc79e7520
 
       - name: Enable AIOMetadata catalogs by default
-        shell: python
+        shell: bash
         run: |
+          python3 - <<'PY'
           from pathlib import Path
 
           path = Path("crates/remux-server/src/addons/stremio.rs")
@@ -75,6 +76,7 @@ jobs:
               raise SystemExit("CatalogInfo layout changed; refusing an unsafe patch")
           src = src.replace(needle, replacement, 1)
           path.write_text(src)
+          PY
 
       - name: Install build dependencies
         run: |
